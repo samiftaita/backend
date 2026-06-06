@@ -9,11 +9,13 @@ use App\Models\RendezVous;
 use App\Models\Service;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
     public function statistiques()
     {
+        try {
         // ── Compteurs globaux ──────────────────────────────────────────
         $totalRdv = RendezVous::count();
         $enAttente = RendezVous::where('statut', 'en_attente')->count();
@@ -22,10 +24,11 @@ class DashboardController extends Controller
         $reportes = RendezVous::where('statut', 'reporte')->count();
 
         // ── RDV des 6 derniers mois (pour courbe) ──────────────────────
+        $moisLabels = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
         $rdvParMois = [];
         for ($i = 5; $i >= 0; $i--) {
-            $date = Carbon::now()->subMonths($i);
-            $label = $date->translatedFormat('M Y');
+            $date  = Carbon::now()->subMonths($i);
+            $label = $moisLabels[$date->month - 1] . ' ' . $date->year;
             $count = RendezVous::whereYear('date_rdv', $date->year)
                 ->whereMonth('date_rdv', $date->month)
                 ->count();
@@ -106,5 +109,9 @@ class DashboardController extends Controller
         ];
 
         return api_success($data, 'Statistiques récupérées', 200);
+        } catch (\Exception $e) {
+            Log::error('Dashboard statistiques error: ' . $e->getMessage());
+            return api_error('Erreur lors du chargement des statistiques: ' . $e->getMessage(), null, 500);
+        }
     }
 }
