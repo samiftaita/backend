@@ -4,13 +4,5 @@ nixPkgs = ["php82", "php82Extensions.pdo", "php82Extensions.pdo_mysql", "php82Ex
 [phases.install]
 cmds = ["composer install --no-dev --optimize-autoloader --no-interaction"]
 
-[phases.build]
-cmds = [
-  "php artisan config:cache",
-  "php artisan route:cache",
-  "php artisan view:cache",
-  "php artisan event:cache"
-]
-
 [start]
-cmd = "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8080"
+cmd = "php artisan config:cache && php artisan route:cache && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8080"
