@@ -12,50 +12,46 @@ use Illuminate\Support\Facades\Validator;
 
 class RendezVousController extends Controller
 {
+    /**
+     * Map ISO weekday number to French day name stored in DB.
+     * Carbon isoWeekday(): 1=Monday ... 7=Sunday
+     */
+    private function getJourSemaine(string $date): string
+    {
+        $map = [
+            1 => 'lundi',
+            2 => 'mardi',
+            3 => 'mercredi',
+            4 => 'jeudi',
+            5 => 'vendredi',
+            6 => 'samedi',
+            7 => 'dimanche',
+        ];
+        return $map[Carbon::parse($date)->isoWeekday()];
+    }
+
     public function index(Request $request)
     {
-        $user = Auth::user();
-        $query = RendezVous::with([
-            'patient.user',
-            'dentiste.user',
-            'service',
-        ]);
+        $user  = Auth::user();
+        $query = RendezVous::with(['patient.user', 'dentiste.user', 'service']);
 
-        // Si l'utilisateur est un patient, afficher uniquement ses rendez-vous
-        if ($user && $user->role === 'patient') {
-            if ($user->patient) {
-                $query->where('patient_id', $user->patient->id);
-            }
+        if ($user && $user->role === 'patient' && $user->patient) {
+            $query->where('patient_id', $user->patient->id);
         }
 
-        if ($request->has('patient_id')) {
-            $query->where('patient_id', $request->patient_id);
-        }
-
-        if ($request->has('dentiste_id')) {
-            $query->where('dentiste_id', $request->dentiste_id);
-        }
-
-        if ($request->has('date_rdv')) {
-            $query->where('date_rdv', $request->date_rdv);
-        }
-
-        if ($request->has('statut')) {
-            $query->where('statut', $request->statut);
-        }
+        if ($request->has('patient_id'))  $query->where('patient_id',  $request->patient_id);
+        if ($request->has('dentiste_id')) $query->where('dentiste_id', $request->dentiste_id);
+        if ($request->has('date_rdv'))    $query->where('date_rdv',    $request->date_rdv);
+        if ($request->has('statut'))      $query->where('statut',      $request->statut);
 
         $rendezVous = $query->orderBy('date_rdv', 'desc')
             ->orderBy('heure_debut', 'asc')
             ->get();
 
-        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous récupérés', 200);
+        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous recuperes', 200);
     }
 
     /**
-     * Retourne les créneaux occupés pour une date donnée.
-     * Ne expose que dentiste_id, heure_debut, heure_fin, statut — aucune donnée personnelle.
-     * Accessible à tous les patients connectés pour calculer les prochaines heures libres.
-     *
      * GET /rendez-vous/occupancy?date_rdv=YYYY-MM-DD
      */
     public function occupancy(Request $request)
@@ -65,38 +61,34 @@ class RendezVousController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return api_error('Paramètre date_rdv requis.', $validator->errors(), 422);
+            return api_error('Parametre date_rdv requis.', $validator->errors(), 422);
         }
 
         $slots = RendezVous::where('date_rdv', $request->date_rdv)
             ->where('statut', '!=', 'annule')
             ->get(['dentiste_id', 'heure_debut', 'heure_fin', 'statut']);
 
-        return api_success(['slots' => $slots], 'Créneaux occupés récupérés', 200);
+        return api_success(['slots' => $slots], 'Creneaux occupes recuperes', 200);
     }
 
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'patient_id' => 'required|exists:patients,id',
+            'patient_id'  => 'required|exists:patients,id',
             'dentiste_id' => 'required|exists:dentistes,id',
-            'service_id' => 'required|exists:services,id',
-            'date_rdv' => 'required|date',
+            'service_id'  => 'required|exists:services,id',
+            'date_rdv'    => 'required|date',
             'heure_debut' => 'required|date_format:H:i',
-            'heure_fin' => 'required|date_format:H:i|after:heure_debut',
-            'motif' => 'nullable|string',
+            'heure_fin'   => 'required|date_format:H:i|after:heure_debut',
+            'motif'       => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return api_error('Erreur de validation', $validator->errors(), 422);
         }
 
-        // 1. Vérifier si le dentiste est disponible ce jour et à cette heure
-        $jourSemaine = Carbon::parse($request->date_rdv)
-            ->locale('fr')
-            ->isoFormat('dddd');
-
-        $jourSemaine = strtolower($jourSemaine);
+        // 1. Verifier disponibilite du dentiste
+        $jourSemaine = $this->getJourSemaine($request->date_rdv);
 
         $disponibiliteExiste = Disponibilite::where('dentiste_id', $request->dentiste_id)
             ->where('jour_semaine', $jourSemaine)
@@ -105,11 +97,11 @@ class RendezVousController extends Controller
             ->where('heure_fin', '>=', $request->heure_fin)
             ->exists();
 
-        if (! $disponibiliteExiste) {
-            return api_error('Le dentiste n’est pas disponible dans ce créneau.', null, 409);
+        if (!$disponibiliteExiste) {
+            return api_error('Le dentiste n\'est pas disponible dans ce creneau.', null, 409);
         }
 
-        // 2. Vérifier si le créneau est déjà réservé
+        // 2. Verifier si le creneau est deja reserve
         $rendezVousExiste = RendezVous::where('dentiste_id', $request->dentiste_id)
             ->where('date_rdv', $request->date_rdv)
             ->where(function ($query) use ($request) {
@@ -120,68 +112,60 @@ class RendezVousController extends Controller
             ->exists();
 
         if ($rendezVousExiste) {
-            return api_error('Ce créneau est déjà réservé pour ce dentiste.', null, 409);
+            return api_error('Ce creneau est deja reserve pour ce dentiste.', null, 409);
         }
 
-        // 3. Créer le rendez-vous
+        // 3. Creer le rendez-vous
         $rendezVous = RendezVous::create([
-            'patient_id' => $request->patient_id,
+            'patient_id'  => $request->patient_id,
             'dentiste_id' => $request->dentiste_id,
-            'service_id' => $request->service_id,
-            'date_rdv' => $request->date_rdv,
+            'service_id'  => $request->service_id,
+            'date_rdv'    => $request->date_rdv,
             'heure_debut' => $request->heure_debut,
-            'heure_fin' => $request->heure_fin,
-            'statut' => 'en_attente',
-            'motif' => $request->motif,
+            'heure_fin'   => $request->heure_fin,
+            'statut'      => 'en_attente',
+            'motif'       => $request->motif,
         ]);
 
-        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous créé avec succès', 201);
+        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous cree avec succes', 201);
     }
 
     public function show($id)
     {
-        $rendezVous = RendezVous::with([
-            'patient.user',
-            'dentiste.user',
-            'service',
-        ])->find($id);
+        $rendezVous = RendezVous::with(['patient.user', 'dentiste.user', 'service'])->find($id);
 
-        if (! $rendezVous) {
+        if (!$rendezVous) {
             return api_error('Rendez-vous introuvable', null, 404);
         }
 
-        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous récupéré', 200);
+        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous recupere', 200);
     }
 
     public function update(Request $request, $id)
     {
         $rendezVous = RendezVous::find($id);
 
-        if (! $rendezVous) {
+        if (!$rendezVous) {
             return api_error('Rendez-vous introuvable', null, 404);
         }
 
         $validator = Validator::make($request->all(), [
-            'patient_id' => 'required|exists:patients,id',
+            'patient_id'  => 'required|exists:patients,id',
             'dentiste_id' => 'required|exists:dentistes,id',
-            'service_id' => 'required|exists:services,id',
-            'date_rdv' => 'required|date',
+            'service_id'  => 'required|exists:services,id',
+            'date_rdv'    => 'required|date',
             'heure_debut' => 'required|date_format:H:i',
-            'heure_fin' => 'required|date_format:H:i|after:heure_debut',
-            'statut' => 'required|in:en_attente,confirme,annule,reporte',
-            'motif' => 'nullable|string',
+            'heure_fin'   => 'required|date_format:H:i|after:heure_debut',
+            'statut'      => 'required|in:en_attente,confirme,annule,reporte',
+            'motif'       => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return api_error('Erreur de validation', $validator->errors(), 422);
         }
 
-        // 1. Vérifier si le dentiste est disponible ce jour et à cette heure
-        $jourSemaine = Carbon::parse($request->date_rdv)
-            ->locale('fr')
-            ->isoFormat('dddd');
-
-        $jourSemaine = strtolower($jourSemaine);
+        // 1. Verifier disponibilite du dentiste
+        $jourSemaine = $this->getJourSemaine($request->date_rdv);
 
         $disponibiliteExiste = Disponibilite::where('dentiste_id', $request->dentiste_id)
             ->where('jour_semaine', $jourSemaine)
@@ -190,11 +174,11 @@ class RendezVousController extends Controller
             ->where('heure_fin', '>=', $request->heure_fin)
             ->exists();
 
-        if (! $disponibiliteExiste) {
-            return api_error('Le dentiste n’est pas disponible dans ce créneau.', null, 409);
+        if (!$disponibiliteExiste) {
+            return api_error('Le dentiste n\'est pas disponible dans ce creneau.', null, 409);
         }
 
-        // 2. Vérifier si le créneau est déjà réservé par un autre rendez-vous
+        // 2. Verifier si le creneau est deja reserve par un autre RDV
         $rendezVousExiste = RendezVous::where('dentiste_id', $request->dentiste_id)
             ->where('date_rdv', $request->date_rdv)
             ->where('id', '!=', $id)
@@ -206,47 +190,44 @@ class RendezVousController extends Controller
             ->exists();
 
         if ($rendezVousExiste) {
-            return api_error('Ce créneau est déjà réservé pour ce dentiste.', null, 409);
+            return api_error('Ce creneau est deja reserve pour ce dentiste.', null, 409);
         }
 
         // 3. Modifier le rendez-vous
         $rendezVous->update([
-            'patient_id' => $request->patient_id,
+            'patient_id'  => $request->patient_id,
             'dentiste_id' => $request->dentiste_id,
-            'service_id' => $request->service_id,
-            'date_rdv' => $request->date_rdv,
+            'service_id'  => $request->service_id,
+            'date_rdv'    => $request->date_rdv,
             'heure_debut' => $request->heure_debut,
-            'heure_fin' => $request->heure_fin,
-            'statut' => $request->statut,
-            'motif' => $request->motif,
+            'heure_fin'   => $request->heure_fin,
+            'statut'      => $request->statut,
+            'motif'       => $request->motif,
         ]);
 
-        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous modifié avec succès', 200);
+        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous modifie avec succes', 200);
     }
 
     public function destroy($id)
     {
-        $user = Auth::user();
+        $user       = Auth::user();
         $rendezVous = RendezVous::find($id);
 
-        if (! $rendezVous) {
+        if (!$rendezVous) {
             return api_error('Rendez-vous introuvable', null, 404);
         }
 
-        // Si c'est un patient, vérifier qu'il s'agit de son propre rendez-vous et qu'il est en attente
         if ($user->role === 'patient') {
             if ($rendezVous->patient_id !== $user->patient->id) {
                 return api_error('Vous ne pouvez annuler que vos propres rendez-vous', null, 403);
             }
-
             if ($rendezVous->statut !== 'en_attente') {
                 return api_error('Vous ne pouvez annuler que les rendez-vous en attente', null, 409);
             }
         }
 
-        // Marquer le rendez-vous comme annulé au lieu de le supprimer
         $rendezVous->update(['statut' => 'annule']);
 
-        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous annulé avec succès', 200);
+        return api_success(['rendez_vous' => $rendezVous], 'Rendez-vous annule avec succes', 200);
     }
 }
