@@ -45,21 +45,38 @@ class DashboardController extends Controller
 
         // ── RDV par jour de la semaine (pour bar chart) ────────────────
         $joursLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-        $rdvParJour = [];
-        // DAYOFWEEK: 1=Dim, 2=Lun, ..., 7=Sam
-        $rawJours = RendezVous::select(
-            DB::raw('DAYOFWEEK(date_rdv) as jour'),
-            DB::raw('COUNT(*) as total')
-        )
-            ->groupBy('jour')
-            ->pluck('total', 'jour')
-            ->toArray();
+        $rdvParJour  = [];
 
-        // Réindexer Lun→Dim (index 0→6)
-        $mapping = [2 => 0, 3 => 1, 4 => 2, 5 => 3, 6 => 4, 7 => 5, 1 => 6];
-        foreach ($joursLabels as $idx => $label) {
-            $dbKey = array_search($idx, $mapping);
-            $rdvParJour[] = ['jour' => $label, 'total' => $rawJours[$dbKey] ?? 0];
+        $driver = config('database.default');
+
+        if ($driver === 'mysql') {
+            $rawJours = RendezVous::select(
+                DB::raw('DAYOFWEEK(date_rdv) as jour'),
+                DB::raw('COUNT(*) as total')
+            )
+                ->groupBy('jour')
+                ->pluck('total', 'jour')
+                ->toArray();
+            // DAYOFWEEK: 1=Dim, 2=Lun, ..., 7=Sam
+            $mapping = [2 => 0, 3 => 1, 4 => 2, 5 => 3, 6 => 4, 7 => 5, 1 => 6];
+            foreach ($joursLabels as $idx => $label) {
+                $dbKey = array_search($idx, $mapping);
+                $rdvParJour[] = ['jour' => $label, 'total' => $rawJours[$dbKey] ?? 0];
+            }
+        } else {
+            // SQLite : strftime('%w') → 0=Dim, 1=Lun, ..., 6=Sam
+            $rawJours = RendezVous::select(
+                DB::raw("strftime('%w', date_rdv) as jour"),
+                DB::raw('COUNT(*) as total')
+            )
+                ->groupBy('jour')
+                ->pluck('total', 'jour')
+                ->toArray();
+            $mapping = ['1' => 0, '2' => 1, '3' => 2, '4' => 3, '5' => 4, '6' => 5, '0' => 6];
+            foreach ($joursLabels as $idx => $label) {
+                $dbKey = array_search($idx, $mapping);
+                $rdvParJour[] = ['jour' => $label, 'total' => $rawJours[$dbKey] ?? 0];
+            }
         }
 
         // ── Derniers rendez-vous (tableau récent) ──────────────────────
