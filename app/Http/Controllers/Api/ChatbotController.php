@@ -111,6 +111,14 @@ class ChatbotController extends Controller
                 return api_error('Réponse invalide du serveur IA.', null, 500);
             }
 
+            // Normaliser les champs manquants
+            $chatbotResponse = array_merge([
+                'intent'  => 'unknown',
+                'message' => '',
+                'action'  => 'none',
+                'data'    => [],
+            ], $chatbotResponse);
+
             // Retourner la réponse formatée
             return api_success($chatbotResponse, 'Réponse du chatbot', 200);
 
@@ -128,38 +136,19 @@ class ChatbotController extends Controller
      */
     private function isValidChatbotResponse($response): bool
     {
-        if (! is_array($response)) {
+        if (!is_array($response)) {
             return false;
         }
 
-        // Vérifier les champs obligatoires
-        $requiredFields = ['intent', 'message', 'action', 'data'];
-        foreach ($requiredFields as $field) {
-            if (! array_key_exists($field, $response)) {
-                return false;
-            }
-        }
-
-        // Valider intent
-        $validIntents = ['faq', 'medical_analysis', 'appointment', 'hygiene_advice', 'greeting', 'unknown'];
-        if (! in_array($response['intent'], $validIntents, true)) {
+        // message est le seul champ vraiment obligatoire
+        if (!isset($response['message']) || !is_string($response['message']) || empty(trim($response['message']))) {
             return false;
         }
 
-        // Valider action
-        if (! is_string($response['action']) || empty(trim($response['action']))) {
-            return false;
-        }
-
-        // Valider message (string non vide)
-        if (! is_string($response['message']) || empty(trim($response['message']))) {
-            return false;
-        }
-
-        // Valider data structure
-        if (! is_array($response['data'])) {
-            return false;
-        }
+        // Normaliser les champs manquants avec des valeurs par défaut
+        if (!isset($response['intent'])) $response['intent'] = 'unknown';
+        if (!isset($response['action'])) $response['action'] = 'none';
+        if (!isset($response['data']))   $response['data']   = [];
 
         return true;
     }
