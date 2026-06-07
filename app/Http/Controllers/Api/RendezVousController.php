@@ -90,11 +90,14 @@ class RendezVousController extends Controller
         // 1. Verifier disponibilite du dentiste
         $jourSemaine = $this->getJourSemaine($request->date_rdv);
 
+        $heureDebut = $request->heure_debut . (strlen($request->heure_debut) === 5 ? ':00' : '');
+        $heureFin   = $request->heure_fin   . (strlen($request->heure_fin)   === 5 ? ':00' : '');
+
         $disponibiliteExiste = Disponibilite::where('dentiste_id', $request->dentiste_id)
             ->where('jour_semaine', $jourSemaine)
             ->where('est_disponible', true)
-            ->where('heure_debut', '<=', $request->heure_debut)
-            ->where('heure_fin', '>=', $request->heure_fin)
+            ->where('heure_debut', '<=', $heureDebut)
+            ->where('heure_fin', '>=', $heureFin)
             ->exists();
 
         if (!$disponibiliteExiste) {
@@ -104,9 +107,9 @@ class RendezVousController extends Controller
         // 2. Verifier si le creneau est deja reserve
         $rendezVousExiste = RendezVous::where('dentiste_id', $request->dentiste_id)
             ->where('date_rdv', $request->date_rdv)
-            ->where(function ($query) use ($request) {
-                $query->where('heure_debut', '<', $request->heure_fin)
-                    ->where('heure_fin', '>', $request->heure_debut);
+            ->where(function ($query) use ($heureDebut, $heureFin) {
+                $query->where('heure_debut', '<', $heureFin)
+                    ->where('heure_fin', '>', $heureDebut);
             })
             ->where('statut', '!=', 'annule')
             ->exists();
@@ -167,11 +170,14 @@ class RendezVousController extends Controller
         // 1. Verifier disponibilite du dentiste
         $jourSemaine = $this->getJourSemaine($request->date_rdv);
 
+        $heureDebut = $request->heure_debut . (strlen($request->heure_debut) === 5 ? ':00' : '');
+        $heureFin   = $request->heure_fin   . (strlen($request->heure_fin)   === 5 ? ':00' : '');
+
         $disponibiliteExiste = Disponibilite::where('dentiste_id', $request->dentiste_id)
             ->where('jour_semaine', $jourSemaine)
             ->where('est_disponible', true)
-            ->where('heure_debut', '<=', $request->heure_debut)
-            ->where('heure_fin', '>=', $request->heure_fin)
+            ->where('heure_debut', '<=', $heureDebut)
+            ->where('heure_fin', '>=', $heureFin)
             ->exists();
 
         if (!$disponibiliteExiste) {
@@ -182,9 +188,9 @@ class RendezVousController extends Controller
         $rendezVousExiste = RendezVous::where('dentiste_id', $request->dentiste_id)
             ->where('date_rdv', $request->date_rdv)
             ->where('id', '!=', $id)
-            ->where(function ($query) use ($request) {
-                $query->where('heure_debut', '<', $request->heure_fin)
-                    ->where('heure_fin', '>', $request->heure_debut);
+            ->where(function ($query) use ($heureDebut, $heureFin) {
+                $query->where('heure_debut', '<', $heureFin)
+                    ->where('heure_fin', '>', $heureDebut);
             })
             ->where('statut', '!=', 'annule')
             ->exists();
