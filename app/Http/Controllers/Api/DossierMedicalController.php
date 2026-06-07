@@ -11,6 +11,17 @@ class DossierMedicalController extends Controller
 {
     public function index()
     {
+        // Créer automatiquement un dossier vide pour les patients qui n'en ont pas
+        $patientsSansDossier = \App\Models\Patient::whereDoesntHave('dossierMedical')->get();
+        foreach ($patientsSansDossier as $patient) {
+            \App\Models\DossierMedical::create([
+                'patient_id'  => $patient->id,
+                'allergies'   => null,
+                'antecedents' => null,
+                'remarques'   => null,
+            ]);
+        }
+
         $dossiers = DossierMedical::with('patient.user')->get();
 
         return api_success(['dossiers_medicaux' => $dossiers], 'Dossiers médicaux récupérés', 200);

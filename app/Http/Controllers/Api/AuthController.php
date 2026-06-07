@@ -49,11 +49,19 @@ class AuthController extends Controller
             ]);
 
             if ($user->role === 'patient') {
-                Patient::create([
+                $patient = Patient::create([
                     'user_id' => $user->id,
                     'date_naissance' => $request->date_naissance,
                     'adresse' => $request->adresse,
                     'sexe' => $request->sexe,
+                ]);
+
+                // Créer automatiquement un dossier médical vide
+                \App\Models\DossierMedical::create([
+                    'patient_id'  => $patient->id,
+                    'allergies'   => null,
+                    'antecedents' => null,
+                    'remarques'   => null,
                 ]);
             }
 
